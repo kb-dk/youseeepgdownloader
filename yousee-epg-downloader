@@ -1,0 +1,199 @@
+#!/usr/bin/env python
+
+import os
+import sys
+import datetime
+import time
+import hashlib
+from math import floor
+
+import sh
+from sh import date
+from sh import wget
+from sh import xmllint
+
+basedir="/home/adam/data/yousee-epg-test"
+logFile = "%s/wget.log" % basedir
+
+epgAgeLimit = 36 # Maximum acceptable age of an EPG file. When this value is trespassed, a warning will be included in the report.
+
+def fetchEpg():
+	"""Use wget to fetch EPG data into memory"""
+
+	try:
+		wgetProc = wget("http://194.239.141.37/statsbiblioteket/epg.xml", "-nv", a="/home/adam/data/yousee-epg/wget.log", O="-", user="statsbib", password="yptks")
+	except sh.ErrorReturnCode:
+		return None
+	else:
+		return wgetProc.stdout
+
+
+def fileSizeOK(data):
+	"""Check whether the size of data is of a expected size."""
+	size = len(data)
+	return (1000000 < size and size < 10000000)
+	
+
+def validXmlFile(path):
+	"""Use xmllint to check the file for well-formed ness."""
+	try:
+		xmllint("--noout", path)
+	except sh.ErrorReturnCode_1:
+		return False
+	else:
+		return True
+
+def timeSinceModification(path):
+	"""Get hours since the last modification of path."""
+	if not os.path.exists(path):
+		return None
+
+	modTime = os.path.getmtime(path)
+	now = time.time()
+	delta = now - modTime
+	return floor(delta/3600)
+
+
+def getMd5sum(data):
+	"""Calculate a md5sum for data."""
+	m = hashlib.md5()
+	m.update(data)
+	return m.hexdigest()
+
+
+def getLatestEpgFilePath():
+	"""Get the newest EPG file stored in the data directory."""
+	files = sorted(os.listdir(basedir))
+	if len(files) is 0:
+		return None
+	else:
+		return basedir + "/" + files[-1]
+
+
+def getLatestMd5Sum():
+	"""Calculate the md5sum for the latest EPG file."""
+	latestEpg = getLatestEpgFilePath()
+	if latestEpg is None:
+		return None
+	else:
+		f = open(latestEpg)
+		return getMd5sum(f.read())
+
+
+def getAgeOfLatestEpgFile():
+	"""Calculate the age of the latest EPG file."""
+	latestEpg = getLatestEpgFilePath()
+	if latestEpg is None:
+		return None
+	else:
+		return timeSinceModification(getLatestEpgFilePath())
+
+
+def saveNewEpgData(data):
+	"""Decide whether or not to saved the downloaded EPG data.
+	If the md5sum is the same as the previous, the new data is thrown away,
+	otherwise it is saved.
+	"""
+	old_md5sum = getLatestMd5Sum()
+	new_md5sum = getMd5sum(data)
+
+	timestamp = date("--iso-8601=seconds").stdout.strip()
+	path = basedir + "/yousee-epg_%s.xml" % timestamp
+
+	if old_md5sum is None and new_md5sum is None:
+		return None
+	elif old_md5sum != new_md5sum:
+		if not os.path.exists(path):
+			f = open(path, "w")
+			f.write(data)
+			f.close()
+			return path
+		else:
+			False
+	else:
+		return False
+	
+
+def convertByteToMB(numberOfByte):
+	"""Hack to convert a number of bytes into the MB-range."""
+	return round(float(numberOfByte)/1024/1024, 1)
+
+
+def run():
+	errors = 0
+	msgs = []
+
+	newEpgData = fetchEpg()
+
+	ageOfLatestEpgFile = getAgeOfLatestEpgFile()
+
+	if (ageOfLatestEpgFile is not None) and (ageOfLatestEpgFile > epgAgeLimit):
+		msgs.append("EPG haven't been updated in %i hours." % ageOfLatestEpgFile)
+		errors += 1
+	
+
+	if not newEpgData:
+		msgs.append("Failed to fetch EPG data.")
+		errors += 1
+		return (msgs, errors)
+	else:
+		msgs.append("Fetched EPG data.")
+
+
+	prettyFileSize = convertByteToMB(len(newEpgData))
+
+	if not fileSizeOK(newEpgData):
+		msgs.append("EPG data seems to have an unexpected size. Expected ~6.5MB, was %sMB." % prettyFileSize)
+		errors += 1
+	else:
+		msgs.append("Filesize OK: %sMB" % prettyFileSize)
+
+
+	md5sum = getMd5sum(newEpgData)
+
+	if md5sum is None:
+		msgs.append("Failed to get md5sum for downloaded data.")
+		errors += 1
+		return (msgs, errors)
+	else:
+		msgs.append("md5sum: " + md5sum)
+
+
+	path = saveNewEpgData(newEpgData)
+
+	if path is None:
+		msgs.append("Something unexpected happened while deciding whether or not to keep the new file.")
+		errors += 1
+		return (msgs, errors)
+	elif path is False:
+		msgs.append("Unchanged EPG data, didn't save.")
+		return (msgs, errors)
+	else:
+		msgs.append("Saved EPG data to file: " + path)
+
+
+	validXml = validXmlFile(path)
+				
+	if not validXml:
+		msgs.append("Malformed EPG data (invalid XML).")
+		errors += 1
+	else:
+		msgs.append("Well-formed EPG data (valid XML).")
+
+	return (msgs, errors)
+
+
+if __name__ == "__main__":
+	(messages, errors) = run()
+	try:
+		pass
+	except Exception as e:
+		print e
+	else:
+		numberOfMsgs = len(messages)
+	
+		if True or (errors > 0):
+			errorReport = "\r\n".join(messages)
+			print errorReport
+		
+
