@@ -31,261 +31,260 @@ epgXml = "yousee-epg-xml-validator"
 
 
 def getConfig(confPath):
-	config = json.load(open(confPath))
+    config = json.load(open(confPath))
 
-	for key in ["DataDir", "LogFile", "StateMonitor", "EpgAgeLimit"]:
-		if not config.has_key(key):
-			print "Bad configuration: Missing \"%s\"." % key
-			sys.exit(1)
+    for key in ["DataDir", "LogFile", "StateMonitor", "EpgAgeLimit"]:
+        if not config.has_key(key):
+            print "Bad configuration: Missing \"%s\"." % key
+            sys.exit(1)
 
-	return (config["DataDir"], config["LogFile"], config["StateMonitor"], config["EpgAgeLimit"])
+    return config["DataDir"], config["LogFile"], config["StateMonitor"], config["EpgAgeLimit"]
 
 
 def fetchEpg():
-	"""Use wget to fetch EPG data into memory"""
+    """Use wget to fetch EPG data into memory"""
 
-	try:
-		wgetProc = wget("http://194.239.141.37/statsbiblioteket/epg.xml", "-nv", a="/home/adam/data/yousee-epg/wget.log", O="-", user="statsbib", password="yptks")
-	except sh.ErrorReturnCode:
-		return None
-	else:
-		return wgetProc.stdout
+    try:
+        wgetProc = wget("http://194.239.141.37/statsbiblioteket/epg.xml", "-nv", a="/home/adam/data/yousee-epg/wget.log", O="-", user="statsbib", password="yptks")
+    except sh.ErrorReturnCode:
+        return None
+    else:
+        return wgetProc.stdout
 
 
 def fileSizeOK(data):
-	"""Check whether the size of data is of a expected size."""
-	size = len(data)
-	return (1000000 < size and size < 10000000)
-	
+    """Check whether the size of data is of a expected size."""
+    return 1000000 < len(data) < 10000000
+
 
 def validXmlFile(path):
-	"""Use xmllint to check the file for well-formed ness."""
-	try:
-		xmllint("--noout", path)
-	except sh.ErrorReturnCode_1:
-		return False
-	else:
-		return True
+    """Use xmllint to check the file for well-formed ness."""
+    try:
+        xmllint("--noout", path)
+    except sh.ErrorReturnCode_1:
+        return False
+    else:
+        return True
 
 def timeSinceModification(path):
-	"""Get hours since the last modification of path."""
-	if not os.path.exists(path):
-		return None
+    """Get hours since the last modification of path."""
+    if not os.path.exists(path):
+        return None
 
-	modTime = os.path.getmtime(path)
-	now = time.time()
-	delta = now - modTime
-	return floor(delta/3600)
+    modTime = os.path.getmtime(path)
+    now = time.time()
+    delta = now - modTime
+    return floor(delta/3600)
 
 
 def getMd5sum(data):
-	"""Calculate a md5sum for data."""
-	m = hashlib.md5()
-	m.update(data)
-	return m.hexdigest()
+    """Calculate a md5sum for data."""
+    m = hashlib.md5()
+    m.update(data)
+    return m.hexdigest()
 
 
 def getLatestEpgFilePath():
-	"""Get the newest EPG file stored in the data directory."""
-	files = sorted(os.listdir(basedir))
-	if len(files) is 0:
-		return None
-	else:
-		return basedir + "/" + files[-1]
+    """Get the newest EPG file stored in the data directory."""
+    files = sorted(os.listdir(basedir))
+    if len(files) is 0:
+        return None
+    else:
+        return basedir + "/" + files[-1]
 
 
 def getLatestMd5Sum():
-	"""Calculate the md5sum for the latest EPG file."""
-	latestEpg = getLatestEpgFilePath()
-	if latestEpg is None:
-		return None
-	else:
-		f = open(latestEpg)
-		return getMd5sum(f.read())
+    """Calculate the md5sum for the latest EPG file."""
+    latestEpg = getLatestEpgFilePath()
+    if latestEpg is None:
+        return None
+    else:
+        f = open(latestEpg)
+        return getMd5sum(f.read())
 
 
 def getAgeOfLatestEpgFile():
-	"""Calculate the age of the latest EPG file."""
-	latestEpg = getLatestEpgFilePath()
-	if latestEpg is None:
-		return None
-	else:
-		return timeSinceModification(getLatestEpgFilePath())
+    """Calculate the age of the latest EPG file."""
+    latestEpg = getLatestEpgFilePath()
+    if latestEpg is None:
+        return None
+    else:
+        return timeSinceModification(getLatestEpgFilePath())
 
 
 def saveNewEpgData(data, path):
-	"""Decide whether or not to saved the downloaded EPG data.
-	If the md5sum is the same as the previous, the new data is thrown away,
-	otherwise it is saved.
-	"""
-	old_md5sum = getLatestMd5Sum()
-	new_md5sum = getMd5sum(data)
+    """Decide whether or not to saved the downloaded EPG data.
+     If the md5sum is the same as the previous, the new data is thrown away,
+     otherwise it is saved.
+     """
+    old_md5sum = getLatestMd5Sum()
+    new_md5sum = getMd5sum(data)
 
-	if old_md5sum is None and new_md5sum is None:
-		return None
-	elif old_md5sum != new_md5sum:
-		if not os.path.exists(path):
-			f = open(path, "w")
-			f.write(data)
-			f.close()
-			return path
-		else:
-			False
-	else:
-		return False
-	
+    if old_md5sum is None and new_md5sum is None:
+        return None
+    elif old_md5sum != new_md5sum:
+        if not os.path.exists(path):
+            f = open(path, "w")
+            f.write(data)
+            f.close()
+            return path
+        else:
+            return False
+    else:
+        return False
+
 
 def convertByteToMB(numberOfByte):
-	"""Hack to convert a number of bytes into the MB-range."""
-	return round(float(numberOfByte)/1024/1024, 1)
+    """Hack to convert a number of bytes into the MB-range."""
+    return round(float(numberOfByte)/1024/1024, 1)
 
 
 def postStatus(filename, component, state, message=None):
-	urlParts = urlparse(stateMonitorAddress)
-	address = urlParts.netloc
-	path = urlParts.path + "/states/" + filename
+    urlParts = urlparse(stateMonitorAddress)
+    address = urlParts.netloc
+    path = urlParts.path + "/states/" + filename
 
-	connection = HTTPConnection(address)
+    connection = HTTPConnection(address)
 
-	component = "<component>%s</component>" % component
-	state = "<stateName>%s</stateName>" % state
+    component = "<component>%s</component>" % component
+    state = "<stateName>%s</stateName>" % state
 
-	if message is None:
-		message = ""
-	else:
-		message = "<message><![CDATA[%s]]></message>" % message
+    if message is None:
+        message = ""
+    else:
+        message = "<message><![CDATA[%s]]></message>" % message
 
-	data = "<state>%s%s%s</state>" % (component, state, message)
+    data = "<state>%s%s%s</state>" % (component, state, message)
 
-	connection.request("POST", path, data, {"Content-Type": "text/xml", "Accept": "application/json"})
-	response = connection.getresponse()
-	response_ = response.read()
-	
-	#print response_
+    connection.request("POST", path, data, {"Content-Type": "text/xml", "Accept": "application/json"})
+    response = connection.getresponse()
+    response_ = response.read()
 
-	return response.status == 200
+    #print response_
+
+    return response.status == 200
 
 
 def run(basedir, logFile, stateMonitorAddress, epgAgeLimit, filename, filepath):
-	errors = 0
-	msgs = []
+    errors = 0
+    msgs = []
 
 
-	ageOfLatestEpgFile = getAgeOfLatestEpgFile()
+    ageOfLatestEpgFile = getAgeOfLatestEpgFile()
 
-	if (ageOfLatestEpgFile is not None) and (ageOfLatestEpgFile > epgAgeLimit):
-		msgs.append("EPG haven't been updated in %i hours." % ageOfLatestEpgFile)
-		errors += 1
-
-
-	postStatus(filename, epgDownload, started)
-	newEpgData = fetchEpg()
-
-	if not newEpgData:
-		msg = "Failed to fetch EPG data."
-		msgs.append(msg)
-		postStatus(filename, epgDownload, failed, msg)
-		errors += 1
-		return (msgs, errors)
-	else:
-		msg = "Fetched EPG data."
-		msgs.append(msg)
-		postStatus(filename, epgDownload, completed, msg)
+    if (ageOfLatestEpgFile is not None) and (ageOfLatestEpgFile > epgAgeLimit):
+        msgs.append("EPG haven't been updated in %i hours." % ageOfLatestEpgFile)
+        errors += 1
 
 
-	postStatus(filename, epgSize, started)
-	prettyFileSize = convertByteToMB(len(newEpgData))
+    postStatus(filename, epgDownload, started)
+    newEpgData = fetchEpg()
 
-	if not fileSizeOK(newEpgData):
-		msg = "EPG data seems to have an unexpected size. Expected ~6.5MB, was %sMB." % prettyFileSize
-		msgs.append(msg)
-		postStatus(filename, epgSize, failed, msg)
-		errors += 1
-	else:
-		msg = "Filesize OK: %sMB" % prettyFileSize
-		msgs.append(msg)
-		postStatus(filename, epgSize, completed, msg)
-
-
-	
-	postStatus(filename, epgMd5, started)
-	md5sum = getMd5sum(newEpgData)
-
-	if md5sum is None:
-		msg = "Failed to get md5sum for downloaded data."
-		msgs.append(msg)
-		postStatus(filename, epgMd5, failed, msg)
-		errors += 1
-		return (msgs, errors)
-	else:
-		msg = "md5sum: " + md5sum
-		msgs.append(msg)
-		postStatus(filename, epgMd5, completed, msg)
+    if not newEpgData:
+        msg = "Failed to fetch EPG data."
+        msgs.append(msg)
+        postStatus(filename, epgDownload, failed, msg)
+        errors += 1
+        return (msgs, errors)
+    else:
+        msg = "Fetched EPG data."
+        msgs.append(msg)
+        postStatus(filename, epgDownload, completed, msg)
 
 
-	postStatus(filename, epgWriter, started)
-	path = saveNewEpgData(newEpgData, filepath)
+    postStatus(filename, epgSize, started)
+    prettyFileSize = convertByteToMB(len(newEpgData))
 
-	if path is None:
-		msg = "Something unexpected happened while deciding whether or not to keep the new file."
-		msgs.append(msg)
-		postStatus(filename, epgWriter, failed, msg)
-		errors += 1
-		return (msgs, errors)
-	elif path is False:
-		msg = "Unchanged EPG data, didn't save."
-		msgs.append(msg)
-		postStatus(filename, epgWriter, completed, msg)
-		return (msgs, errors)
-	else:
-		msg = "Saved EPG data to file: " + path
-		msgs.append(msg)
-		postStatus(filename, epgWriter, completed, msg)
+    if not fileSizeOK(newEpgData):
+        msg = "EPG data seems to have an unexpected size. Expected ~6.5MB, was %sMB." % prettyFileSize
+        msgs.append(msg)
+        postStatus(filename, epgSize, failed, msg)
+        errors += 1
+    else:
+        msg = "Filesize OK: %sMB" % prettyFileSize
+        msgs.append(msg)
+        postStatus(filename, epgSize, completed, msg)
 
 
-	postStatus(filename, epgXml, started)
-	validXml = validXmlFile(path)
-				
-	if not validXml:
-		msg = "Malformed EPG data (invalid XML)."
-		msgs.append(msg)
-		postStatus(filename, epgXml, failed, msg)
-		errors += 1
-	else:
-		msg = "Well-formed EPG data (valid XML)."
-		msgs.append(msg)
-		postStatus(filename, epgXml, completed, msg)
 
-	return (msgs, errors)
+    postStatus(filename, epgMd5, started)
+    md5sum = getMd5sum(newEpgData)
+
+    if md5sum is None:
+        msg = "Failed to get md5sum for downloaded data."
+        msgs.append(msg)
+        postStatus(filename, epgMd5, failed, msg)
+        errors += 1
+        return (msgs, errors)
+    else:
+        msg = "md5sum: " + md5sum
+        msgs.append(msg)
+        postStatus(filename, epgMd5, completed, msg)
 
 
-if __name__ == "__main__":	
-	if len(sys.argv) != 2:
-		print "Usage: %s config-file" % sys.argv[0]
-		sys.exit(1)
+    postStatus(filename, epgWriter, started)
+    path = saveNewEpgData(newEpgData, filepath)
 
-	try:
-		configFile = sys.argv[1]
-		(basedir, logFile, stateMonitorAddress, epgAgeLimit) = getConfig(configFile)
-		timestamp = date("--iso-8601=seconds").stdout.strip()
-		filename = "yousee-epg_%s.xml" % timestamp
-		filepath = basedir + "/" + filename
-	except ValueError as e:
-		print "Error loading the config file: " + configFile
-		print e
-	else:
-		try:
-			postStatus(filename, epgComponent, started)
-			(messages, errors) = run(basedir, logFile, stateMonitorAddress, epgAgeLimit, filename, filepath)
-		except Exception as e:
-			postStatus(filename, epgComponent, failed)
-			print e
-		else:
-			postStatus(filename, epgComponent, done)
-			numberOfMsgs = len(messages)
+    if path is None:
+        msg = "Something unexpected happened while deciding whether or not to keep the new file."
+        msgs.append(msg)
+        postStatus(filename, epgWriter, failed, msg)
+        errors += 1
+        return (msgs, errors)
+    elif path is False:
+        msg = "Unchanged EPG data, didn't save."
+        msgs.append(msg)
+        postStatus(filename, epgWriter, completed, msg)
+        return (msgs, errors)
+    else:
+        msg = "Saved EPG data to file: " + path
+        msgs.append(msg)
+        postStatus(filename, epgWriter, completed, msg)
 
-			if True or (errors > 0): # log this and remove if True
-				errorReport = "\r\n".join(messages)
-				print errorReport
+
+    postStatus(filename, epgXml, started)
+    validXml = validXmlFile(path)
+
+    if not validXml:
+        msg = "Malformed EPG data (invalid XML)."
+        msgs.append(msg)
+        postStatus(filename, epgXml, failed, msg)
+        errors += 1
+    else:
+        msg = "Well-formed EPG data (valid XML)."
+        msgs.append(msg)
+        postStatus(filename, epgXml, completed, msg)
+
+    return (msgs, errors)
+
+
+if __name__ == "__main__":
+    if len(sys.argv) != 2:
+        print "Usage: %s config-file" % sys.argv[0]
+        sys.exit(1)
+
+    try:
+        configFile = sys.argv[1]
+        (basedir, logFile, stateMonitorAddress, epgAgeLimit) = getConfig(configFile)
+        timestamp = date("--iso-8601=seconds").stdout.strip()
+        filename = "yousee-epg_%s.xml" % timestamp
+        filepath = basedir + "/" + filename
+    except ValueError as e:
+        print "Error loading the config file: " + configFile
+        print e
+    else:
+        try:
+            postStatus(filename, epgComponent, started)
+            (messages, errors) = run(basedir, logFile, stateMonitorAddress, epgAgeLimit, filename, filepath)
+        except Exception as e:
+            postStatus(filename, epgComponent, failed)
+            print e
+        else:
+            postStatus(filename, epgComponent, done)
+            numberOfMsgs = len(messages)
+
+            if True or (errors > 0): # log this and remove if True
+                errorReport = "\r\n".join(messages)
+                print errorReport
 		
 
