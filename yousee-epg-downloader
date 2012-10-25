@@ -2,12 +2,12 @@
 
 import os
 import sys
-import datetime
 import time
 import hashlib
 import json
 from urlparse import urlparse
 from httplib import HTTPConnection
+import urllib
 from math import floor
 
 import sh
@@ -139,19 +139,18 @@ def convertByteToMB(numberOfByte):
     return round(float(numberOfByte)/1024/1024, 1)
 
 
-def postStatus(filename, component, state, message=None):
+def postStatus(filename, component, state, message=""):
+    print filename, component, state + ":", message
     urlParts = urlparse(stateMonitorAddress)
     address = urlParts.netloc
-    path = urlParts.path + "/states/" + filename
+    path = urlParts.path + "/states/" + urllib.quote(filename)
 
     connection = HTTPConnection(address)
 
     component = "<component>%s</component>" % component
     state = "<stateName>%s</stateName>" % state
 
-    if message is None:
-        message = ""
-    else:
+    if message is not "":
         message = "<message><![CDATA[%s]]></message>" % message
 
     data = "<state>%s%s%s</state>" % (component, state, message)
