@@ -253,16 +253,17 @@ def run(filename, filepath, epgAgeLimit):
         msgs.append(msg)
         postStatus(filename, epgXml, completed, msg)
 
-    return (msgs, errors)
+    return msgs, errors
 
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
         print "Usage: %s config-file" % sys.argv[0]
         sys.exit(1)
+    else:
+        configFile = sys.argv[1]
 
     try:
-        configFile = sys.argv[1]
         (basedir, logFile, stateMonitorAddress, epgAgeLimit) = getConfig(configFile)
         timestamp = date("--iso-8601=seconds").stdout.strip()
         filename = "yousee-epg_%s.xml" % timestamp
