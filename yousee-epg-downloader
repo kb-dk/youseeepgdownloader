@@ -163,7 +163,7 @@ def postStatus(filename, component, state, message=""):
     return response.status == 200
 
 
-def run(basedir, logFile, stateMonitorAddress, epgAgeLimit, filename, filepath):
+def run(filename, filepath, epgAgeLimit):
     errors = 0
     msgs = []
 
@@ -273,7 +273,7 @@ if __name__ == "__main__":
     else:
         try:
             postStatus(filename, epgComponent, started)
-            (messages, errors) = run(basedir, logFile, stateMonitorAddress, epgAgeLimit, filename, filepath)
+            (messages, errors) = run(filename, filepath, epgAgeLimit)
         except Exception as e:
             postStatus(filename, epgComponent, failed)
             print e
@@ -284,5 +284,3 @@ if __name__ == "__main__":
             if True or (errors > 0): # log this and remove if True
                 errorReport = "\r\n".join(messages)
                 print errorReport
-		
-
