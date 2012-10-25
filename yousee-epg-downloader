@@ -2,10 +2,9 @@
 
 import os
 import sys
-from time import time as now
+import datetime
 import hashlib
 import json
-from math import floor
 
 import sh
 from sh import date
@@ -18,6 +17,7 @@ from stateinformer import StateInformer
 # defines
 
 epgComponent = "yousee-epg-fetcher"
+epgAgeCheck = "yousee-epg-age-check"
 epgDownload = "yousee-epg-downloader"
 epgSize = "yousee-epg-file-check"
 epgMd5 = "yousee-epg-md5-check"
@@ -36,7 +36,10 @@ def getConfig(confPath):
             print "Bad configuration: Missing \"%s\"." % key
             sys.exit(1)
 
-    return config["DataDir"], config["LogFile"], config["StateMonitor"], config["EpgAgeLimit"]
+    ageLimitHours = int(config["EpgAgeLimit"])
+    ageLimitDelta = datetime.timedelta(hours=ageLimitHours)
+
+    return config["DataDir"], config["LogFile"], config["StateMonitor"], ageLimitDelta
 
 
 class YouseeEpgDownloader():
@@ -71,14 +74,14 @@ class YouseeEpgDownloader():
         else:
             return True
 
-    def timeSinceModification(self, path):
+
+    def timeOfLastModification(self, path):
         """Get hours since the last modification of path."""
         if not os.path.exists(path):
             return None
 
         modTime = os.path.getmtime(path)
-        delta = now() - modTime
-        return floor(delta/3600)
+        return datetime.datetime.fromtimestamp(modTime)
 
 
     def getMd5sum(self, data):
@@ -113,7 +116,7 @@ class YouseeEpgDownloader():
         if latestEpg is None:
             return None
         else:
-            return self.timeSinceModification(self.getLatestEpgFilePath())
+            return datetime.datetime.today() - self.timeOfLastModification(latestEpg)
 
 
     def saveNewEpgData(self, data, path):
@@ -147,11 +150,21 @@ class YouseeEpgDownloader():
         errors = 0
         msgs = []
 
-        ageOfLatestEpgFile = self.getAgeOfLatestEpgFile()
 
-        if (ageOfLatestEpgFile is not None) and (ageOfLatestEpgFile > epgAgeLimit):
+        epgAgeCheckComponent = informer.get(epgAgeCheck)
+        epgAgeCheckComponent.started()
+
+        ageOfLatestEpgFile = self.getAgeOfLatestEpgFile()
+        epgTooOld =  (ageOfLatestEpgFile is not None) and (ageOfLatestEpgFile > epgAgeLimit)
+
+        if epgTooOld:
             msgs.append("EPG haven't been updated in %i hours." % ageOfLatestEpgFile)
             errors += 1
+            epgWriterComponent.failed(msg)
+            return msgs, errors
+
+        epgAgeCheckComponent.completed()
+
 
         epgDownloadComponent = informer.get(epgDownload)
         epgDownloadComponent.started()
@@ -211,10 +224,16 @@ class YouseeEpgDownloader():
             errors += 1
             return msgs, errors
         elif path is False:
-            msg = "Unchanged EPG data, didn't save."
-            msgs.append(msg)
-            epgWriterComponent.completed(msg)
-            return msgs, errors
+            if epgTooOld:
+                msgs.append("EPG haven't been updated in %i hours." % ageOfLatestEpgFile)
+                errors += 1
+                epgWriterComponent.failed(msg)
+                return msgs, errors
+            else:
+                msg = "Unchanged EPG data, didn't save."
+                msgs.append(msg)
+                epgWriterComponent.completed(msg)
+                return msgs, errors
         else:
             msg = "Saved EPG data to file: " + path
             msgs.append(msg)
