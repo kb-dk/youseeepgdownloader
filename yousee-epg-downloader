@@ -42,8 +42,14 @@ def getConfig(confPath):
     return config["DataDir"], config["LogFile"], config["StateMonitor"], ageLimitDelta
 
 
+def createFilename(delta=0):
+    timestamp = date("--iso-8601=seconds", date="%s seconds" % delta).stdout.strip()
+    return "yousee-epg_%s.xml" % timestamp
+
+
 class YouseeEpgDownloader():
-    def __init__(self, filename, filepath, epgAgeLimit, informer):
+    def __init__(self, stateMonitorAddress, filename, filepath, epgAgeLimit, informer):
+        self.stateMonitorAddress = stateMonitorAddress
         self.filename = filename
         self.filepath = filepath
         self.epgAgeLimit = epgAgeLimit
@@ -118,6 +124,14 @@ class YouseeEpgDownloader():
         else:
             return datetime.datetime.today() - self.timeOfLastModification(latestEpg)
 
+    def getMTimeOfLatestEpgFile(self):
+        """Calculate the age of the latest EPG file."""
+        latestEpg = self.getLatestEpgFilePath()
+        if latestEpg is None:
+            return None
+        else:
+            return self.timeOfLastModification(latestEpg)
+
 
     def saveNewEpgData(self, data, path):
         """Decide whether or not to saved the downloaded EPG data.
@@ -153,15 +167,36 @@ class YouseeEpgDownloader():
 
         epgAgeCheckComponent = informer.get(epgAgeCheck)
         epgAgeCheckComponent.started()
+        lastEpgModification = self.getMTimeOfLatestEpgFile()
 
-        ageOfLatestEpgFile = self.getAgeOfLatestEpgFile()
-        epgTooOld =  (ageOfLatestEpgFile is not None) and (ageOfLatestEpgFile > epgAgeLimit)
+
+        if lastEpgModification is not None:
+            ageOfLatestEpgFile = (datetime.datetime.today() - lastEpgModification)
+            epgTooOld = ageOfLatestEpgFile > epgAgeLimit
+        else:
+            ageOfLatestEpgFile = None
+            epgTooOld = False
 
         if epgTooOld:
-            msgs.append("EPG haven't been updated in %i hours." % ageOfLatestEpgFile)
+            msgs.append("EPG haven't been updated in " + str(ageOfLatestEpgFile))
             errors += 1
-            epgWriterComponent.failed(msg)
-            return msgs, errors
+
+            def missingEpgs():
+                now = datetime.datetime.today()
+                t = epgAgeLimit
+
+                #while lastEpgModification + t < now:
+
+                while now - t > lastEpgModification:
+                    yield t.total_seconds()
+                    t += epgAgeLimit
+
+            for epg in missingEpgs():
+                filename_ = createFilename(-epg)
+                informer_ = StateInformer(filename_, stateMonitorAddress)
+                epgComponent_ = informer_.get(epgComponent)
+                epgComponent_.failed()
+
 
         epgAgeCheckComponent.completed()
 
@@ -225,7 +260,7 @@ class YouseeEpgDownloader():
             return msgs, errors
         elif path is False:
             if epgTooOld:
-                msgs.append("EPG haven't been updated in %i hours." % ageOfLatestEpgFile)
+                msgs.append("EPG haven't been updated in " + str(ageOfLatestEpgFile))
                 errors += 1
                 epgWriterComponent.failed(msg)
                 return msgs, errors
@@ -266,8 +301,7 @@ if __name__ == "__main__":
 
     try:
         (basedir, logFile, stateMonitorAddress, epgAgeLimit) = getConfig(configFile)
-        timestamp = date("--iso-8601=seconds").stdout.strip()
-        filename = "yousee-epg_%s.xml" % timestamp
+        filename = createFilename()
         filepath = basedir + "/" + filename
         informer = StateInformer(filename, stateMonitorAddress)
     except ValueError as e:
@@ -276,7 +310,7 @@ if __name__ == "__main__":
     else:
         epgComponent_ = informer.get(epgComponent)
         try:
-            downloader = YouseeEpgDownloader(filename, filepath, epgAgeLimit, informer)
+            downloader = YouseeEpgDownloader(stateMonitorAddress, filename, filepath, epgAgeLimit, informer)
             epgComponent_.started()
             (messages, errors) = downloader.run()
         except Exception as e:
