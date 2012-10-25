@@ -2,11 +2,18 @@ from httplib import HTTPConnection
 from urllib import quote
 from urlparse import urlparse
 
-class StateInformer():
-    def __init__(self, entity, stateMonitorAddress):
-        self.response = None
-        self.entity = entity
+
+class StateInformerComponent():
+    def __init__(self, stateMonitorAddress, entity, component):
+        self.stateStarted="Started"
+        self.stateFailed="Failed"
+        self.stateCompleted="Completed"
+        self.stateDone="Done"
+
         self.stateMonitorAddress = stateMonitorAddress
+        self.component = component
+        self.entity = entity
+
 
     def getAddress(self):
         urlParts = urlparse(self.stateMonitorAddress)
@@ -14,8 +21,9 @@ class StateInformer():
         path =  urlParts.path + "/states/" + quote(self.entity)
         return address, path
 
-    def createPayload(self, component, state, message=""):
-        component = "<component>%s</component>" % component
+
+    def __createPayload(self, state, message=""):
+        component = "<component>%s</component>" % self.component
         state = "<stateName>%s</stateName>" % state
 
         if message is not "":
@@ -23,10 +31,11 @@ class StateInformer():
 
         return "<state>%s%s%s</state>" % (component, state, message)
 
-    def postStatus(self, component, state, message=""):
-        print self.entity, component, state + ":", message
 
-        data = self.createPayload(component, state, message)
+    def __postStatus(self, state, message=""):
+        print self.entity, self.component, state + ":", message
+
+        data = self.__createPayload(state, message)
         (address, path) = self.getAddress()
 
         connection = HTTPConnection(address)
@@ -37,7 +46,32 @@ class StateInformer():
 
         self.response = response.read()
 
+        print path
         return response.status == 200
+
 
     def getResponse(self):
         return self.response
+
+    def started(self, message=""):
+        return self.__postStatus(self.stateStarted, message)
+
+    def failed(self, message=""):
+        return self.__postStatus(self.stateFailed, message)
+
+    def completed(self, message=""):
+        return self.__postStatus(self.stateCompleted, message)
+
+    def done(self, message=""):
+        return self.__postStatus(self.stateDone, message)
+
+
+class StateInformer():
+    def __init__(self, entity, stateMonitorAddress):
+        self.response = None
+        self.entity = entity
+        self.stateMonitorAddress = stateMonitorAddress
+
+
+    def get(self, component):
+        return StateInformerComponent(self.stateMonitorAddress, self.entity, component)

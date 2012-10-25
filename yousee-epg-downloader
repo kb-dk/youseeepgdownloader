@@ -17,11 +17,6 @@ from stateinformer import StateInformer
 
 # defines
 
-started="Started"
-failed="Failed"
-completed="Completed"
-done="Done"
-
 epgComponent = "yousee-epg-fetcher"
 epgDownload = "yousee-epg-downloader"
 epgSize = "yousee-epg-file-check"
@@ -157,83 +152,87 @@ class YouseeEpgDownloader():
             msgs.append("EPG haven't been updated in %i hours." % ageOfLatestEpgFile)
             errors += 1
 
-
-        informer.postStatus(epgDownload, started)
+        epgDownloadComponent = informer.get(epgDownload)
+        epgDownloadComponent.started()
         newEpgData = self.fetchEpg()
 
         if not newEpgData:
             msg = "Failed to fetch EPG data."
             msgs.append(msg)
-            informer.postStatus(epgDownload, failed, msg)
+            epgDownloadComponent.failed(msg)
             errors += 1
             return msgs, errors
         else:
             msg = "Fetched EPG data."
             msgs.append(msg)
-            informer.postStatus(epgDownload, completed, msg)
+            epgDownloadComponent.completed(msg)
 
 
-        informer.postStatus(epgSize, started)
+        epgSizeComponent = informer.get(epgSize)
+        epgSizeComponent.started()
         prettyFileSize = self.convertByteToMB(len(newEpgData))
 
         if not self.fileSizeOK(newEpgData):
             msg = "EPG data seems to have an unexpected size. Expected ~6.5MB, was %sMB." % prettyFileSize
             msgs.append(msg)
-            informer.postStatus(epgSize, failed, msg)
+            epgSizeComponent.failed(msg)
             errors += 1
         else:
             msg = "Filesize OK: %sMB" % prettyFileSize
             msgs.append(msg)
-            informer.postStatus(epgSize, completed, msg)
+            epgSizeComponent.completed(msg)
 
 
-        informer.postStatus(epgMd5, started)
+        epgMd5Component = informer.get(epgMd5)
+        epgMd5Component.started()
         md5sum = self.getMd5sum(newEpgData)
 
         if md5sum is None:
             msg = "Failed to get md5sum for downloaded data."
             msgs.append(msg)
-            informer.postStatus(epgMd5, failed, msg)
+            epgMd5Component.failed(msg)
             errors += 1
             return msgs, errors
         else:
             msg = "md5sum: " + md5sum
             msgs.append(msg)
-            informer.postStatus(epgMd5, completed, msg)
+            epgMd5Component.completed(msg)
 
 
-        informer.postStatus(epgWriter, started)
+        epgWriterComponent = informer.get(epgWriter)
+        epgWriterComponent.started()
         path = self.saveNewEpgData(newEpgData, filepath)
 
         if path is None:
             msg = "Something unexpected happened while deciding whether or not to keep the new file."
             msgs.append(msg)
-            informer.postStatus(epgWriter, failed, msg)
+            epgWriterComponent.failed(msg)
             errors += 1
             return msgs, errors
         elif path is False:
             msg = "Unchanged EPG data, didn't save."
             msgs.append(msg)
-            informer.postStatus(epgWriter, completed, msg)
+            epgWriterComponent.completed(msg)
             return msgs, errors
         else:
             msg = "Saved EPG data to file: " + path
             msgs.append(msg)
-            informer.postStatus(epgWriter, completed, msg)
+            epgWriterComponent.completed(msg)
 
 
-        informer.postStatus(epgXml, started)
+        epgXmlComponent = informer.get(epgXml)
+        epgXmlComponent.started()
         validXml = self.validXmlFile(path)
 
         if not validXml:
             msg = "Malformed EPG data (invalid XML)."
             msgs.append(msg)
-            informer.postStatus(epgXml, failed, msg)
+            epgXmlComponent.failed(msg)
             errors += 1
         else:
             msg = "Well-formed EPG data (valid XML)."
             msgs.append(msg)
-            informer.postStatus(epgXml, completed, msg)
+            epgXmlComponent.completed(msg)
 
         return msgs, errors
 
@@ -255,15 +254,16 @@ if __name__ == "__main__":
         print "Error loading the config file: " + configFile
         print e
     else:
+        epgComponent_ = informer.get(epgComponent)
         try:
             downloader = YouseeEpgDownloader(filename, filepath, epgAgeLimit, informer)
-            informer.postStatus(epgComponent, started)
+            epgComponent_.started()
             (messages, errors) = downloader.run()
-        except Exception as e:
-            informer.postStatus(epgComponent, failed, e.message)
+        except ValueError as e:#    Exception as e:
+            epgComponent_.failed(e.message)
             print e
         else:
-            informer.postStatus(epgComponent, done)
+            epgComponent_.done()
             numberOfMsgs = len(messages)
 
             if True or (errors > 0): # log this and remove if True
