@@ -26,6 +26,9 @@ epgXml = "yousee-epg-xml-validator"
 
 
 def getConfig(confPath):
+    """Load file from confPath, and parse as json.
+    Return the values we're interested in.
+    """
     config = json.load(open(confPath))
 
     for key in ["DataDir", "LogFile", "StateMonitor", "EpgAgeLimit"]:
@@ -46,7 +49,6 @@ class YouseeEpgDownloader():
 
     def fetchEpg(self):
         """Use wget to fetch EPG data into memory"""
-
         try:
             wgetProc = wget("http://194.239.141.37/statsbiblioteket/epg.xml", "-nv", a="/home/adam/data/yousee-epg/wget.log", O="-", user="statsbib", password="yptks")
         except sh.ErrorReturnCode:
@@ -144,7 +146,6 @@ class YouseeEpgDownloader():
     def run(self):
         errors = 0
         msgs = []
-
 
         ageOfLatestEpgFile = self.getAgeOfLatestEpgFile()
 
@@ -259,7 +260,7 @@ if __name__ == "__main__":
             downloader = YouseeEpgDownloader(filename, filepath, epgAgeLimit, informer)
             epgComponent_.started()
             (messages, errors) = downloader.run()
-        except ValueError as e:#    Exception as e:
+        except Exception as e:
             epgComponent_.failed(e.message)
             print e
         else:

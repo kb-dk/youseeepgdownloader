@@ -4,12 +4,12 @@ from urlparse import urlparse
 
 
 class StateInformerComponent():
-    def __init__(self, stateMonitorAddress, entity, component):
-        self.stateStarted="Started"
-        self.stateFailed="Failed"
-        self.stateCompleted="Completed"
-        self.stateDone="Done"
+    stateStarted="Started"
+    stateFailed="Failed"
+    stateCompleted="Completed"
+    stateDone="Done"
 
+    def __init__(self, stateMonitorAddress, entity, component):
         self.stateMonitorAddress = stateMonitorAddress
         self.component = component
         self.entity = entity
@@ -33,20 +33,16 @@ class StateInformerComponent():
 
 
     def __postStatus(self, state, message=""):
-        print self.entity, self.component, state + ":", message
-
         data = self.__createPayload(state, message)
         (address, path) = self.getAddress()
 
         connection = HTTPConnection(address)
-
 
         connection.request("POST", path, data, {"Content-Type": "text/xml", "Accept": "application/json"})
         response = connection.getresponse()
 
         self.response = response.read()
 
-        print path
         return response.status == 200
 
 
