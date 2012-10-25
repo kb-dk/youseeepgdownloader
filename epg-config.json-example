@@ -1,0 +1,6 @@
+{
+	"DataDir": "/path/to/yousee/epg/data/dir",
+	"LogFile": "/var/log/yousee-epg-downlodaer.log",
+	"StateMonitor": "http://canopus:9511/workflowstatemonitor",
+	"EpgAgeLimit": 30
+}
