@@ -39,14 +39,14 @@ Double-quotes have intentionally been left out from the before-mentioned setting
 
 ### documentation of configuration options
 
-*Username:* Username for the yousee server
-*Password:* Password for the yousee server
-*EpgUrl:* File to fetch when run
-*DataDir:* Directory to store downloaded files in. Files will be split into directories named after the current year.
-*TrashDir:* Broken files will be moved here.
-*LogFile:* File used for logging.
-*StateMonitor:* URL for the yousee workflow state monitor, which is used for reported sucessful and failed downloads.
-*EpgAgeLimit:* Ideal max time between EPG downloads.
-*EpgAgeLimitWiggleRoom:* Files older than EpgAgeLimit+EpgAgeLimitWiggleRoom will cause the program to report missing epg files to the state monitor.
-*EpgMinSize:* Minimum size, in bytes, for the downloaded file.
-*EpgMaxSize:* Maximum size, in bytes, for the downloaded file.
+* *Username:* Username for the yousee server
+* *Password:* Password for the yousee server
+* *EpgUrl:* File to fetch when run
+* *DataDir:* Directory to store downloaded files in. Files will be split into directories named after the current year.
+* *TrashDir:* Broken files will be moved here.
+* *LogFile:* File used for logging.
+* *StateMonitor:* URL for the yousee workflow state monitor, which is used for reported sucessful and failed downloads.
+* *EpgAgeLimit:* Ideal max time between EPG downloads.
+* *EpgAgeLimitWiggleRoom:* Files older than EpgAgeLimit+EpgAgeLimitWiggleRoom will cause the program to report missing epg files to the state monitor.
+* *EpgMinSize:* Minimum size, in bytes, for the downloaded file.
+* *EpgMaxSize:* Maximum size, in bytes, for the downloaded file.
