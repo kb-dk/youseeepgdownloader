@@ -1,3 +1,4 @@
+import logging
 from httplib import HTTPConnection
 from urllib import quote
 from urlparse import urlparse
@@ -19,6 +20,7 @@ class StateInformerComponent():
         urlParts = urlparse(self.stateMonitorAddress)
         address = urlParts.netloc
         path =  urlParts.path + "/states/" + quote(self.entity)
+        logging.debug("Created url: \"%s%s\"" % (address, path))
         return address, path
 
 
@@ -38,10 +40,14 @@ class StateInformerComponent():
 
         connection = HTTPConnection(address)
 
+        logging.debug("Setting state for \"%s\" to \"%s\"" % (self.entity, state))
         connection.request("POST", path, data, {"Content-Type": "text/xml", "Accept": "application/json"})
         response = connection.getresponse()
 
         self.response = response.read()
+
+        if response.status != 200:
+            logging.error("Failed to communicate with state monitor at %s" % self.stateMonitorAddress)
 
         return response.status == 200
 

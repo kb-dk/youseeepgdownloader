@@ -5,6 +5,8 @@ import sys
 import datetime
 import hashlib
 import json
+import logging
+from epgconfig import EpgConfig
 
 import sh
 from sh import date
@@ -25,41 +27,23 @@ epgWriter = "yousee-epg-filewriter"
 epgXml = "yousee-epg-xml-validator"
 
 
-def getConfig(confPath):
-    """Load file from confPath, and parse as json.
-    Return the values we're interested in.
-    """
-    config = json.load(open(confPath))
-
-    for key in ["DataDir", "LogFile", "StateMonitor", "EpgAgeLimit"]:
-        if not config.has_key(key):
-            print "Bad configuration: Missing \"%s\"." % key
-            sys.exit(1)
-
-    ageLimitHours = int(config["EpgAgeLimit"])
-    ageLimitDelta = datetime.timedelta(hours=ageLimitHours)
-
-    return config["DataDir"], config["LogFile"], config["StateMonitor"], ageLimitDelta
-
-
 def createFilename(delta=0):
     timestamp = date("--iso-8601=seconds", date="%s seconds" % delta).stdout.strip()
     return "yousee-epg_%s.xml" % timestamp
 
 
 class YouseeEpgDownloader():
-    def __init__(self, stateMonitorAddress, filename, filepath, epgAgeLimit, informer):
-        self.stateMonitorAddress = stateMonitorAddress
+    def __init__(self, config, filename, filepath, informer):
+        self.config = config
         self.filename = filename
         self.filepath = filepath
-        self.epgAgeLimit = epgAgeLimit
         self.informer = informer
 
 
     def fetchEpg(self):
         """Use wget to fetch EPG data into memory"""
         try:
-            wgetProc = wget("http://194.239.141.37/statsbiblioteket/epg.xml", "-nv", a="/home/adam/data/yousee-epg/wget.log", O="-", user="statsbib", password="yptks")
+            wgetProc = wget(self.config.epgUrl, "-nv", a=self.config.logFile, O="-", user=self.config.username, password=self.config.password)
         except sh.ErrorReturnCode:
             return None
         else:
@@ -68,7 +52,7 @@ class YouseeEpgDownloader():
 
     def fileSizeOK(self, data):
         """Check whether the size of data is of a expected size."""
-        return 1000000 < len(data) < 10000000
+        return self.config.epgMinSize < len(data) < self.config.epgMaxSize
 
 
     def validXmlFile(self, path):
@@ -99,11 +83,11 @@ class YouseeEpgDownloader():
 
     def getLatestEpgFilePath(self):
         """Get the newest EPG file stored in the data directory."""
-        files = sorted(os.listdir(basedir))
+        files = sorted(os.listdir(self.config.dataDir))
         if len(files) is 0:
             return None
         else:
-            return basedir + "/" + files[-1]
+            return self.config.dataDir + "/" + files[-1]
 
 
     def getLatestMd5Sum(self):
@@ -169,33 +153,35 @@ class YouseeEpgDownloader():
         epgAgeCheckComponent.started()
         lastEpgModification = self.getMTimeOfLatestEpgFile()
 
-
         if lastEpgModification is not None:
             ageOfLatestEpgFile = (datetime.datetime.today() - lastEpgModification)
-            epgTooOld = ageOfLatestEpgFile > epgAgeLimit
+            epgTooOld = ageOfLatestEpgFile > self.config.epgAgeLimit
         else:
             ageOfLatestEpgFile = None
             epgTooOld = False
 
         if epgTooOld:
-            msgs.append("EPG haven't been updated in " + str(ageOfLatestEpgFile))
-            errors += 1
+            msg = "EPG haven't been updated in " + str(ageOfLatestEpgFile)
+            logging.error(msg)
+            msgs.append(msg)
 
             def missingEpgs():
                 now = datetime.datetime.today()
-                t = epgAgeLimit
+                t = self.config.epgAgeLimit
 
                 #while lastEpgModification + t < now:
 
                 while now - t > lastEpgModification:
                     yield t.total_seconds()
-                    t += epgAgeLimit
+                    t += self.config.epgAgeLimit
 
             for epg in missingEpgs():
                 filename_ = createFilename(-epg)
-                informer_ = StateInformer(filename_, stateMonitorAddress)
+                informer_ = StateInformer(filename_, self.config.stateMonitor)
                 epgComponent_ = informer_.get(epgComponent)
                 epgComponent_.failed()
+                msg = "Missing EPG: " + filename_
+                logging.error(msg)
 
 
         epgAgeCheckComponent.completed()
@@ -207,12 +193,14 @@ class YouseeEpgDownloader():
 
         if not newEpgData:
             msg = "Failed to fetch EPG data."
+            logging.error(msg)
             msgs.append(msg)
             epgDownloadComponent.failed(msg)
             errors += 1
             return msgs, errors
         else:
             msg = "Fetched EPG data."
+            logging.info(msg)
             msgs.append(msg)
             epgDownloadComponent.completed(msg)
 
@@ -223,11 +211,14 @@ class YouseeEpgDownloader():
 
         if not self.fileSizeOK(newEpgData):
             msg = "EPG data seems to have an unexpected size. Expected ~6.5MB, was %sMB." % prettyFileSize
+            logging.error(msg)
             msgs.append(msg)
             epgSizeComponent.failed(msg)
             errors += 1
+            return msgs, errors
         else:
             msg = "Filesize OK: %sMB" % prettyFileSize
+            logging.info(msg)
             msgs.append(msg)
             epgSizeComponent.completed(msg)
 
@@ -238,12 +229,14 @@ class YouseeEpgDownloader():
 
         if md5sum is None:
             msg = "Failed to get md5sum for downloaded data."
+            logging.error(msg)
             msgs.append(msg)
             epgMd5Component.failed(msg)
             errors += 1
             return msgs, errors
         else:
             msg = "md5sum: " + md5sum
+            logging.info(msg)
             msgs.append(msg)
             epgMd5Component.completed(msg)
 
@@ -254,23 +247,28 @@ class YouseeEpgDownloader():
 
         if path is None:
             msg = "Something unexpected happened while deciding whether or not to keep the new file."
+            logging.error(msg)
             msgs.append(msg)
             epgWriterComponent.failed(msg)
             errors += 1
             return msgs, errors
         elif path is False:
             if epgTooOld:
-                msgs.append("EPG haven't been updated in " + str(ageOfLatestEpgFile))
+                msg = "EPG haven't been updated in " + str(ageOfLatestEpgFile)
+                logging.error(msg)
+                msgs.append(msg)
                 errors += 1
                 epgWriterComponent.failed(msg)
                 return msgs, errors
             else:
                 msg = "Unchanged EPG data, didn't save."
+                logging.info(msg)
                 msgs.append(msg)
                 epgWriterComponent.completed(msg)
                 return msgs, errors
         else:
             msg = "Saved EPG data to file: " + path
+            logging.info(msg)
             msgs.append(msg)
             epgWriterComponent.completed(msg)
 
@@ -280,12 +278,14 @@ class YouseeEpgDownloader():
         validXml = self.validXmlFile(path)
 
         if not validXml:
-            msg = "Malformed EPG data (invalid XML)."
+            msg = "Invalid XML."
+            logging.error(msg)
             msgs.append(msg)
             epgXmlComponent.failed(msg)
             errors += 1
         else:
-            msg = "Well-formed EPG data (valid XML)."
+            msg = "Valid XML."
+            logging.info(msg)
             msgs.append(msg)
             epgXmlComponent.completed(msg)
 
@@ -300,26 +300,30 @@ if __name__ == "__main__":
         configFile = sys.argv[1]
 
     try:
-        (basedir, logFile, stateMonitorAddress, epgAgeLimit) = getConfig(configFile)
-        filename = createFilename()
-        filepath = basedir + "/" + filename
-        informer = StateInformer(filename, stateMonitorAddress)
-    except ValueError as e:
+        config = EpgConfig(configFile)
+    except Exception as e:
         print "Error loading the config file: " + configFile
         print e
     else:
+        logging.basicConfig(filename=config.logFile,level=logging.INFO, format='%(asctime)s: %(message)s')
+        filename = createFilename()
+        filepath = config.dataDir + "/" + filename
+        informer = StateInformer(filename, config.stateMonitor)
         epgComponent_ = informer.get(epgComponent)
         try:
-            downloader = YouseeEpgDownloader(stateMonitorAddress, filename, filepath, epgAgeLimit, informer)
+            downloader = YouseeEpgDownloader(config, filename, filepath, informer)
+            logging.info("Created new %s for \"%s\", using \"%s\" as state monitor." % (downloader.__class__.__name__, filename, config.stateMonitor))
             epgComponent_.started()
             (messages, errors) = downloader.run()
         except Exception as e:
             epgComponent_.failed(e.message)
+            logging.info("Failed: %s" % downloader.__class__.__name__)
             print e
+            logging.info("Created new %s for \"%s\", using \"%s\" as state monitor." % (downloader.__class__.__name__, filename, config.stateMonitor))
         else:
             epgComponent_.done()
-            numberOfMsgs = len(messages)
+            logging.info("Done: %s" % downloader.__class__.__name__)
 
-            if True or (errors > 0): # log this and remove if True
-                errorReport = "\r\n".join(messages)
-                print errorReport
+            logging.shutdown()
+            if errors > 0:
+                sys.exit(2)

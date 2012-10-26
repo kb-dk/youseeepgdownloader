@@ -1,6 +1,11 @@
 {
+    "Username": "..",
+    "Password": "..",
+    "EpgUrl" : "http://194.239.141.37/statsbiblioteket/epg.xml",
     "DataDir": "/path/to/yousee/epg/data/dir",
     "LogFile": "/var/log/yousee-epg-downlodaer.log",
     "StateMonitor": "http://canopus:9511/workflowstatemonitor",
-    "EpgAgeLimit": 24
+    "EpgAgeLimit": 24,
+    "EpgMinSize": 1000000,
+    "EpgMaxSize": 10000000
 }
