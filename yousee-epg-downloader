@@ -128,6 +128,7 @@ class YouseeEpgDownloader():
         else:
             return datetime.datetime.today() - self.timeOfLastModification(latestEpg)
 
+
     def getMTimeOfLatestEpgFile(self):
         """Calculate the age of the latest EPG file."""
         latestEpg = self.getLatestEpgFilePath()
@@ -201,13 +202,13 @@ class YouseeEpgDownloader():
 
         if lastEpgModification is not None:
             ageOfLatestEpgFile = (datetime.datetime.today() - lastEpgModification)
-            epgTooOld = ageOfLatestEpgFile > self.config.epgAgeLimit
+            epgTooOld = ageOfLatestEpgFile > (self.config.epgAgeLimit + self.config.epgAgeLimitWiggleRoom)
         else:
             ageOfLatestEpgFile = None
             epgTooOld = False
 
         if epgTooOld:
-            msg = "EPG haven't been updated in " + str(ageOfLatestEpgFile)
+            msg = "Last EPG is too old. Age: %s" % str(ageOfLatestEpgFile)
             logging.error(msg)
             msgs.append(msg)
 

@@ -6,7 +6,7 @@ class EpgConfig:
         """Load file from confPath, and parse as json."""
         config = json.load(open(confPath))
 
-        for key in ["Username", "Password", "DataDir", "TrashDir", "LogFile", "StateMonitor", "EpgAgeLimit", "EpgMinSize", "EpgMaxSize"]:
+        for key in ["Username", "Password", "DataDir", "TrashDir", "LogFile", "StateMonitor", "EpgAgeLimit", "EpgAgeLimitWiggleRoom", "EpgMinSize", "EpgMaxSize"]:
             if not config.has_key(key):
                 raise Exception("Bad configuration: Missing \"%s\"." % key)
 
@@ -18,5 +18,6 @@ class EpgConfig:
         self.logFile = config["LogFile"]
         self.stateMonitor = config["StateMonitor"]
         self.epgAgeLimit = datetime.timedelta(hours=config["EpgAgeLimit"])
+        self.epgAgeLimitWiggleRoom = datetime.timedelta(hours=config["EpgAgeLimitWiggleRoom"])
         self.epgMinSize = config["EpgMinSize"]
         self.epgMaxSize = config["EpgMaxSize"]

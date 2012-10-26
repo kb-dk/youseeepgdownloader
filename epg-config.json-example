@@ -7,6 +7,7 @@
     "LogFile": "/var/log/yousee-epg-downlodaer.log",
     "StateMonitor": "http://canopus:9511/workflowstatemonitor",
     "EpgAgeLimit": 24,
+    "EpgAgeLimitWiggleRoom": 1,
     "EpgMinSize": 1000000,
     "EpgMaxSize": 10000000
 }
