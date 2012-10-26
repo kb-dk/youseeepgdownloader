@@ -2,9 +2,9 @@
 
 import os
 import sys
+import shutil
 import datetime
 import hashlib
-import json
 import logging
 from epgconfig import EpgConfig
 
@@ -33,11 +33,14 @@ def createFilename(delta=0):
 
 
 class YouseeEpgDownloader():
-    def __init__(self, config, filename, filepath, informer):
+    def __init__(self, config, informer, filename):
         self.config = config
         self.filename = filename
-        self.filepath = filepath
         self.informer = informer
+
+
+    def getInformerComponent(self):
+        return informer.get(epgComponent)
 
 
     def fetchEpg(self):
@@ -83,11 +86,28 @@ class YouseeEpgDownloader():
 
     def getLatestEpgFilePath(self):
         """Get the newest EPG file stored in the data directory."""
-        files = sorted(os.listdir(self.config.dataDir))
-        if len(files) is 0:
-            return None
-        else:
-            return self.config.dataDir + "/" + files[-1]
+
+        # get the files and dirs in self.config.dataDir
+        dirs = sorted(os.listdir(self.config.dataDir))
+
+        # directories are supposed to be named like "2012", "2013", ..;
+        # - remove elements where the filename has a length different from 4,
+        # - and isn't a number.
+        dirs = filter(lambda dir: len(dir) is 4 and dir.isdigit(), dirs)
+
+        # turn the dirnames into paths relative to self.config.dataDir
+        dirs = map(lambda dir: os.path.join(self.config.dataDir, dir), dirs)
+
+        # filter out non-directories, and reverse the list so that the newest will be first.
+        dirs = filter(os.path.isdir, dirs)
+        dirs.reverse()
+
+        for dir in dirs:
+            files = sorted(os.listdir(dir))
+            if len(files) is not 0:
+                return os.path.join(dir, files[-1])
+
+        return None
 
 
     def getLatestMd5Sum(self):
@@ -117,26 +137,52 @@ class YouseeEpgDownloader():
             return self.timeOfLastModification(latestEpg)
 
 
-    def saveNewEpgData(self, data, path):
+    def saveNewEpgData(self, data, filename):
         """Decide whether or not to saved the downloaded EPG data.
          If the md5sum is the same as the previous, the new data is thrown away,
          otherwise it is saved.
          """
+
+        year = str(datetime.datetime.today().year)
+        dir = os.path.join(config.dataDir, year)
+
+        if not os.path.exists(dir):
+            os.mkdir(dir)
+
+        filepath = os.path.join(dir, filename)
         old_md5sum = self.getLatestMd5Sum()
         new_md5sum = self.getMd5sum(data)
 
         if old_md5sum is None and new_md5sum is None:
             return None
         elif old_md5sum != new_md5sum:
-            if not os.path.exists(path):
-                f = open(path, "w")
+            if not os.path.exists(filepath):
+                f = open(filepath, "w")
                 f.write(data)
                 f.close()
-                return path
+                return filepath
             else:
                 return False
         else:
             return False
+
+
+    def moveToTrash(self, src):
+        if not os.path.exists(config.trashDir):
+            os.mkdir(config.trashDir)
+
+        elif not os.path.isdir(config.trashDir):
+            logging.critical("Could not move data to trash, \"%s\" is not a directory.")
+            return False
+
+        target = os.path.join(config.trashDir, os.path.basename(src))
+
+        if os.path.exists(target):
+            logging.error("Tried to trash a file, but \"%s\" already exists." % target)
+            return False
+
+        shutil.move(src, target)
+        return target
 
 
     def convertByteToMB(self, numberOfByte):
@@ -148,7 +194,7 @@ class YouseeEpgDownloader():
         errors = 0
         msgs = []
 
-
+        # age related checks
         epgAgeCheckComponent = informer.get(epgAgeCheck)
         epgAgeCheckComponent.started()
         lastEpgModification = self.getMTimeOfLatestEpgFile()
@@ -166,10 +212,9 @@ class YouseeEpgDownloader():
             msgs.append(msg)
 
             def missingEpgs():
+                """Yield a list of seconds relative to now that corresponds to a time where epg should have been downloaded. Very roughly."""
                 now = datetime.datetime.today()
                 t = self.config.epgAgeLimit
-
-                #while lastEpgModification + t < now:
 
                 while now - t > lastEpgModification:
                     yield t.total_seconds()
@@ -186,7 +231,7 @@ class YouseeEpgDownloader():
 
         epgAgeCheckComponent.completed()
 
-
+        # download epg data into memory using wget
         epgDownloadComponent = informer.get(epgDownload)
         epgDownloadComponent.started()
         newEpgData = self.fetchEpg()
@@ -204,7 +249,7 @@ class YouseeEpgDownloader():
             msgs.append(msg)
             epgDownloadComponent.completed(msg)
 
-
+        # check size of the downloaded data
         epgSizeComponent = informer.get(epgSize)
         epgSizeComponent.started()
         prettyFileSize = self.convertByteToMB(len(newEpgData))
@@ -222,7 +267,7 @@ class YouseeEpgDownloader():
             msgs.append(msg)
             epgSizeComponent.completed(msg)
 
-
+        # get the md5sum of the downloaded data
         epgMd5Component = informer.get(epgMd5)
         epgMd5Component.started()
         md5sum = self.getMd5sum(newEpgData)
@@ -240,10 +285,10 @@ class YouseeEpgDownloader():
             msgs.append(msg)
             epgMd5Component.completed(msg)
 
-
+        # persist the downloaded data to disk
         epgWriterComponent = informer.get(epgWriter)
         epgWriterComponent.started()
-        path = self.saveNewEpgData(newEpgData, filepath)
+        path = self.saveNewEpgData(newEpgData, filename)
 
         if path is None:
             msg = "Something unexpected happened while deciding whether or not to keep the new file."
@@ -272,13 +317,14 @@ class YouseeEpgDownloader():
             msgs.append(msg)
             epgWriterComponent.completed(msg)
 
-
+        # run xmllint on the downloaded data
         epgXmlComponent = informer.get(epgXml)
         epgXmlComponent.started()
         validXml = self.validXmlFile(path)
 
         if not validXml:
-            msg = "Invalid XML."
+            trashPath = self.moveToTrash(path)
+            msg = "Invalid XML, moved to \"%s\"." % trashPath
             logging.error(msg)
             msgs.append(msg)
             epgXmlComponent.failed(msg)
@@ -307,23 +353,27 @@ if __name__ == "__main__":
     else:
         logging.basicConfig(filename=config.logFile,level=logging.INFO, format='%(asctime)s: %(message)s')
         filename = createFilename()
-        filepath = config.dataDir + "/" + filename
         informer = StateInformer(filename, config.stateMonitor)
         epgComponent_ = informer.get(epgComponent)
         try:
-            downloader = YouseeEpgDownloader(config, filename, filepath, informer)
+            downloader = YouseeEpgDownloader(config, informer, filename)
             logging.info("Created new %s for \"%s\", using \"%s\" as state monitor." % (downloader.__class__.__name__, filename, config.stateMonitor))
             epgComponent_.started()
             (messages, errors) = downloader.run()
         except Exception as e:
             epgComponent_.failed(e.message)
-            logging.info("Failed: %s" % downloader.__class__.__name__)
-            print e
-            logging.info("Created new %s for \"%s\", using \"%s\" as state monitor." % (downloader.__class__.__name__, filename, config.stateMonitor))
+            logging.error("Failed: %s" % filename)
+            print e.message
+            sys.exit(2)
         else:
-            epgComponent_.done()
-            logging.info("Done: %s" % downloader.__class__.__name__)
+            if errors > 0:
+                epgComponent_.failed("\n".join(messages))
+                logging.error("Failed: %s" % filename)
+                exitCode = 3
+            else:
+                epgComponent_.done()
+                logging.info("Done: %s" % filename)
+                exitCode = 0
 
             logging.shutdown()
-            if errors > 0:
-                sys.exit(2)
+            sys.exit(exitCode)
