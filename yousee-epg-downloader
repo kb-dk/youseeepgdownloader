@@ -339,6 +339,25 @@ class YouseeEpgDownloader():
         return msgs, errors
 
 
+def rotateLogs(config):
+    if config.oldLogFiles > 0 and  os.path.exists(config.logFile) and os.path.getsize(config.logFile) > config.logFileMaxSize:
+        def numToFile(i): return "%s.%i" % (config.logFile, i)
+
+        a = map(numToFile, range(0, config.oldLogFiles-1))
+        b = map(numToFile, range(1, config.oldLogFiles))
+        filePairs = filter(lambda (x,y): os.path.exists(x), zip(a,b))
+        filePairs.reverse()
+
+        for source, target in filePairs:
+            print source, target
+            shutil.move(source, target)
+
+        shutil.move(config.logFile, "%s.0" % config.logFile)
+        return True
+    else:
+        return False
+
+
 if __name__ == "__main__":
     if len(sys.argv) != 2:
         print "Usage: %s config-file" % sys.argv[0]
@@ -352,6 +371,7 @@ if __name__ == "__main__":
         print "Error loading the config file: " + configFile
         print e
     else:
+        rotateLogs(config)
         logging.basicConfig(filename=config.logFile,level=logging.INFO, format='%(asctime)s: %(message)s')
         filename = createFilename()
         informer = StateInformer(filename, config.stateMonitor)

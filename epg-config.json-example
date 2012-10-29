@@ -5,6 +5,8 @@
     "DataDir": "/path/to/yousee/epg/data/dir",
     "TrashDir": "/path/to/broken/yousee/epg/data/dir",
     "LogFile": "/var/log/yousee-epg-downlodaer.log",
+    "LogFileMaxSize": 1000000,
+    "OldLogFiles": 5,
     "StateMonitor": "http://canopus:9511/workflowstatemonitor",
     "EpgAgeLimit": 24,
     "EpgAgeLimitWiggleRoom": 1,

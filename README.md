@@ -28,6 +28,8 @@ Double-quotes have intentionally been left out from the before-mentioned setting
     "DataDir": "/path/to/yousee/epg/data/dir",
     "TrashDir": "/path/to/broken/yousee/epg/data/dir",
     "LogFile": "/var/log/yousee-epg-downlodaer.log",
+    "LogFileMaxSize": 0,
+    "OldLogFiles": 5,
     "StateMonitor": "http://canopus:9511/workflowstatemonitor",
     "EpgAgeLimit": 24,
     "EpgAgeLimitWiggleRoom": 1,
@@ -45,6 +47,8 @@ Double-quotes have intentionally been left out from the before-mentioned setting
 * *DataDir:* Directory to store downloaded files in. Files will be split into directories named after the current year.
 * *TrashDir:* Broken files will be moved here.
 * *LogFile:* File used for logging.
+* *LogFileMaxSize:* Maximum size of the log file, before rotation happens. Logs are only rotated at startup, so files will end up being a wee bit bigger. A value of 0 will make the logfiles rotate on every run.
+* *OldLogFiles:* Number of old log files to keep. *Warning:* A value of 0 (zero) will disable logfile rotation.
 * *StateMonitor:* URL for the yousee workflow state monitor, which is used for reported sucessful and failed downloads.
 * *EpgAgeLimit:* Ideal max time between EPG downloads.
 * *EpgAgeLimitWiggleRoom:* Files older than EpgAgeLimit+EpgAgeLimitWiggleRoom will cause the program to report missing epg files to the state monitor.
