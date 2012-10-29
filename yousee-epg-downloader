@@ -369,7 +369,8 @@ if __name__ == "__main__":
         config = EpgConfig(configFile)
     except Exception as e:
         print "Error loading the config file: " + configFile
-        print e
+        print e.message
+        sys.exit(2)
     else:
         rotateLogs(config)
         logging.basicConfig(filename=config.logFile,level=logging.INFO, format='%(asctime)s: %(message)s')
@@ -385,12 +386,12 @@ if __name__ == "__main__":
             epgComponent_.failed(e.message)
             logging.error("Failed: %s" % filename)
             print e.message
-            sys.exit(2)
+            sys.exit(3)
         else:
             if errors > 0:
                 epgComponent_.failed("\n".join(messages))
                 logging.error("Failed: %s" % filename)
-                exitCode = 3
+                exitCode = 4
             else:
                 epgComponent_.done()
                 logging.info("Done: %s" % filename)
