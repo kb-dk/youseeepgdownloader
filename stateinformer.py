@@ -1,5 +1,6 @@
 import logging
 from httplib import HTTPConnection
+import socket
 from urllib import quote
 from urlparse import urlparse
 
@@ -38,18 +39,23 @@ class StateInformerComponent():
         data = self.__createPayload(state, message)
         (address, path) = self.getAddress()
 
-        connection = HTTPConnection(address)
+        errorMsg = "Failed to communicate with state monitor at %s" % self.stateMonitorAddress
 
-        logging.debug("Setting state for \"%s\" to \"%s\"" % (self.entity, state))
-        connection.request("POST", path, data, {"Content-Type": "text/xml", "Accept": "application/json"})
-        response = connection.getresponse()
+        try:
+            connection = HTTPConnection(address)
+            logging.debug("Setting state for \"%s\" to \"%s\"" % (self.entity, state))
+            connection.request("POST", path, data, {"Content-Type": "text/xml", "Accept": "application/json"})
+            response = connection.getresponse()
 
-        self.response = response.read()
+            self.response = response.read()
+        except socket.error as e:
+            logging.error("%s: %s" % (errorMsg, e))
+            return False
+        else:
+            if response.status != 200:
+                logging.error("%s: %s %s%s" % (errorMsg, response.status, response.reason))
 
-        if response.status != 200:
-            logging.error("Failed to communicate with state monitor at %s" % self.stateMonitorAddress)
-
-        return response.status == 200
+            return response.status == 200
 
 
     def getResponse(self):
