@@ -106,6 +106,25 @@ class YouseeEpgDownloader():
             return False
 
 
+    def reportMissingEpgFiles(self, newestEpg):
+        def missingEpgs():
+            """Yield a list of seconds relative to now that corresponds to a time where epg should have been downloaded. Very roughly."""
+            now = datetime.datetime.today()
+            t = self.config.epgAgeLimit
+
+            while now - t > newestEpg.getTimeOfLastModification():
+                yield t.total_seconds()
+                t += self.config.epgAgeLimit
+
+        for epg in missingEpgs():
+            filename_ = createFilename(-epg)
+            informer_ = StateInformer(filename_, self.config.stateMonitor)
+            epgComponent_ = informer_.get(epgComponent)
+            epgComponent_.failed()
+            msg = "Missing EPG: " + filename_
+            logging.error(msg)
+
+
     def run(self):
         errors = 0
         msgs = []
@@ -124,23 +143,7 @@ class YouseeEpgDownloader():
             msg = "Last EPG is too old. Age: %s" % str(newestEpg.getAge())
             logging.error(msg)
             msgs.append(msg)
-
-            def missingEpgs():
-                """Yield a list of seconds relative to now that corresponds to a time where epg should have been downloaded. Very roughly."""
-                now = datetime.datetime.today()
-                t = self.config.epgAgeLimit
-
-                while now - t > newestEpg.getTimeOfLastModification():
-                    yield t.total_seconds()
-                    t += self.config.epgAgeLimit
-
-            for epg in missingEpgs():
-                filename_ = createFilename(-epg)
-                informer_ = StateInformer(filename_, self.config.stateMonitor)
-                epgComponent_ = informer_.get(epgComponent)
-                epgComponent_.failed()
-                msg = "Missing EPG: " + filename_
-                logging.error(msg)
+            self.reportMissingEpgFiles(newestEpg)
 
 
         epgAgeCheckComponent.completed()
