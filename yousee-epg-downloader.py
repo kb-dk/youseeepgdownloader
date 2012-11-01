@@ -7,6 +7,7 @@ import datetime
 import hashlib
 import logging
 from epgconfig import EpgConfig
+from epgfile import EpgFile
 
 import sh
 
@@ -40,48 +41,24 @@ class YouseeEpgDownloader():
         return informer.get(epgComponent)
 
 
-    def fetchEpg(self):
+    def fetchEpg(self, filename):
         """Use wget to fetch EPG data into memory"""
         try:
             wgetProc = sh.wget(self.config.epgUrl, "-nv", a=self.config.logFile, O="-", user=self.config.username, password=self.config.password)
         except sh.ErrorReturnCode:
             return None
         else:
-            return wgetProc.stdout
+            year = str(datetime.datetime.today().year)
+            targetDir = os.path.join(self.config.dataDir, year)
+
+            if not os.path.exists(targetDir):
+                os.mkdir(targetDir)
+
+            filepath = os.path.join(targetDir, filename)
+            return EpgFile(self.config, filepath, data=wgetProc.stdout)
 
 
-    def fileSizeOK(self, data):
-        """Check whether the size of data is of a expected size."""
-        return self.config.epgMinSize < len(data) < self.config.epgMaxSize
-
-
-    def validXmlFile(self, path):
-        """Use xmllint to check the file for well-formed ness."""
-        try:
-            sh.xmllint("--noout", path)
-        except sh.ErrorReturnCode_1:
-            return False
-        else:
-            return True
-
-
-    def timeOfLastModification(self, path):
-        """Get hours since the last modification of path."""
-        if not os.path.exists(path):
-            return None
-
-        modTime = os.path.getmtime(path)
-        return datetime.datetime.fromtimestamp(modTime)
-
-
-    def getMd5sum(self, data):
-        """Calculate a md5sum for data."""
-        m = hashlib.md5()
-        m.update(data)
-        return m.hexdigest()
-
-
-    def getNewestEpgFilePath(self):
+    def getNewestEpgFile(self):
         """Get the newest EPG file stored in the data directory."""
 
         # get the files and dirs in self.config.dataDir
@@ -102,90 +79,31 @@ class YouseeEpgDownloader():
         for thisDir in dirs:
             files = sorted(os.listdir(thisDir))
             if len(files) != 0:
-                return os.path.join(thisDir, files[-1])
+                return EpgFile(self.config, os.path.join(thisDir, files[-1]))
 
         return None
 
 
-    def getNewestMd5Sum(self):
-        """Calculate the md5sum for the newest EPG file."""
-        newestEpg = self.getNewestEpgFilePath()
-        if newestEpg is None:
-            return None
-        else:
-            f = open(newestEpg)
-            return self.getMd5sum(f.read())
-
-
-    def getAgeOfNewestEpgFile(self):
-        """Calculate the age of the newest EPG file."""
-        newestEpg = self.getNewestEpgFilePath()
-        if newestEpg is None:
-            return None
-        else:
-            return datetime.datetime.today() - self.timeOfLastModification(newestEpg)
-
-
-    def getMTimeOfNewestEpgFile(self):
-        """Calculate the age of the newest EPG file."""
-        newestEpg = self.getNewestEpgFilePath()
-        if newestEpg is None:
-            return None
-        else:
-            return self.timeOfLastModification(newestEpg)
-
-
-    def saveNewEpgData(self, data, filename):
+    def saveNewEpgData(self, epg):
         """Decide whether or not to saved the downloaded EPG data.
          If the md5sum is the same as the previous, the new data is thrown away,
          otherwise it is saved.
          """
+        oldEpg = self.getNewestEpgFile()
+        new_md5sum = epg.getMd5sum()
+        save = False
 
-        year = str(datetime.datetime.today().year)
-        targetDir = os.path.join(config.dataDir, year)
-
-        if not os.path.exists(targetDir):
-            os.mkdir(targetDir)
-
-        filepath = os.path.join(targetDir, filename)
-        old_md5sum = self.getNewestMd5Sum()
-        new_md5sum = self.getMd5sum(data)
-
-        if old_md5sum is None and new_md5sum is None:
-            return None
-        elif old_md5sum != new_md5sum:
-            if not os.path.exists(filepath):
-                f = open(filepath, "w")
-                f.write(data)
-                f.close()
-                return filepath
+        if new_md5sum:
+            if oldEpg:
+                if oldEpg.getMd5sum() != new_md5sum:
+                    save = True
             else:
-                return False
+                save = True
+
+        if save:
+            return epg.persist()
         else:
             return False
-
-
-    def moveToTrash(self, src):
-        if not os.path.exists(config.trashDir):
-            os.mkdir(config.trashDir)
-
-        elif not os.path.isdir(config.trashDir):
-            logging.critical("Could not move data to trash, \"%s\" is not a directory.")
-            return False
-
-        target = os.path.join(config.trashDir, os.path.basename(src))
-
-        if os.path.exists(target):
-            logging.error("Tried to trash a file, but \"%s\" already exists." % target)
-            return False
-
-        shutil.move(src, target)
-        return target
-
-
-    def convertByteToMB(self, numberOfByte):
-        """Hack to convert a number of bytes into the MB-range."""
-        return round(float(numberOfByte)/1024/1024, 1)
 
 
     def run(self):
@@ -195,17 +113,15 @@ class YouseeEpgDownloader():
         # age related checks
         epgAgeCheckComponent = informer.get(epgAgeCheck)
         epgAgeCheckComponent.started()
-        lastEpgModification = self.getMTimeOfNewestEpgFile()
+        newestEpg = self.getNewestEpgFile()
 
-        if lastEpgModification is not None:
-            ageOfNewestEpgFile = (datetime.datetime.today() - lastEpgModification)
-            epgTooOld = ageOfNewestEpgFile > (self.config.epgAgeLimit + self.config.epgAgeLimitWiggleRoom)
+        if newestEpg:
+            epgTooOld = newestEpg.getAge() > (self.config.epgAgeLimit + self.config.epgAgeLimitWiggleRoom)
         else:
-            ageOfNewestEpgFile = None
             epgTooOld = False
 
         if epgTooOld:
-            msg = "Last EPG is too old. Age: %s" % str(ageOfNewestEpgFile)
+            msg = "Last EPG is too old. Age: %s" % str(newestEpg.getAge())
             logging.error(msg)
             msgs.append(msg)
 
@@ -214,7 +130,7 @@ class YouseeEpgDownloader():
                 now = datetime.datetime.today()
                 t = self.config.epgAgeLimit
 
-                while now - t > lastEpgModification:
+                while now - t > newestEpg.getTimeOfLastModification():
                     yield t.total_seconds()
                     t += self.config.epgAgeLimit
 
@@ -232,9 +148,9 @@ class YouseeEpgDownloader():
         # download epg data into memory using wget
         epgDownloadComponent = informer.get(epgDownload)
         epgDownloadComponent.started()
-        newEpgData = self.fetchEpg()
+        newEpg = self.fetchEpg(filename)
 
-        if not newEpgData:
+        if not newEpg:
             msg = "Failed to fetch EPG data."
             logging.error(msg)
             msgs.append(msg)
@@ -250,17 +166,16 @@ class YouseeEpgDownloader():
         # check size of the downloaded data
         epgSizeComponent = informer.get(epgSize)
         epgSizeComponent.started()
-        prettyFileSize = self.convertByteToMB(len(newEpgData))
 
-        if not self.fileSizeOK(newEpgData):
-            msg = "EPG data seems to have an unexpected size. Expected ~6.5MB, was %sMB." % prettyFileSize
+        if not newEpg.fileSizeOK():
+            msg = "EPG data seems to have an unexpected size. Expected ~6.5MB, was %sMB." % newEpg.getPrettySize()
             logging.error(msg)
             msgs.append(msg)
             epgSizeComponent.failed(msg)
             errors += 1
             return msgs, errors
         else:
-            msg = "Filesize OK: %sMB" % prettyFileSize
+            msg = "Filesize OK: %sMB" % newEpg.getPrettySize()
             logging.info(msg)
             msgs.append(msg)
             epgSizeComponent.completed(msg)
@@ -268,9 +183,9 @@ class YouseeEpgDownloader():
         # get the md5sum of the downloaded data
         epgMd5Component = informer.get(epgMd5)
         epgMd5Component.started()
-        md5sum = self.getMd5sum(newEpgData)
+        md5sum = newEpg.getMd5sum()
 
-        if md5sum is None:
+        if not md5sum:
             msg = "Failed to get md5sum for downloaded data."
             logging.error(msg)
             msgs.append(msg)
@@ -286,18 +201,18 @@ class YouseeEpgDownloader():
         # persist the downloaded data to disk
         epgWriterComponent = informer.get(epgWriter)
         epgWriterComponent.started()
-        path = self.saveNewEpgData(newEpgData, filename)
+        persisted = self.saveNewEpgData(newEpg)
 
-        if path is None:
+        if persisted is None:
             msg = "Something unexpected happened while deciding whether or not to keep the new file."
             logging.error(msg)
             msgs.append(msg)
             epgWriterComponent.failed(msg)
             errors += 1
             return msgs, errors
-        elif path is False:
+        elif persisted is False:
             if epgTooOld:
-                msg = "EPG haven't been updated in " + str(ageOfNewestEpgFile)
+                msg = "EPG haven't been updated in " + str(newestEpg.getAge())
                 logging.error(msg)
                 msgs.append(msg)
                 errors += 1
@@ -310,7 +225,7 @@ class YouseeEpgDownloader():
                 epgWriterComponent.completed(msg)
                 return msgs, errors
         else:
-            msg = "Saved EPG data to file: " + path
+            msg = "Saved EPG data to file: " + newEpg.getPath()
             logging.info(msg)
             msgs.append(msg)
             epgWriterComponent.completed(msg)
@@ -318,11 +233,14 @@ class YouseeEpgDownloader():
         # run xmllint on the downloaded data
         epgXmlComponent = informer.get(epgXml)
         epgXmlComponent.started()
-        validXml = self.validXmlFile(path)
+        validXml = newEpg.isValidXml()
 
         if not validXml:
-            trashPath = self.moveToTrash(path)
-            msg = "Invalid XML, moved to \"%s\"." % trashPath
+            trashPath = newEpg.moveToTrash()
+            if trashPath:
+                msg = "Invalid XML, moved to \"%s\"." % trashPath
+            else:
+                msg = "Invalid XML, but failed while moving the file to the trash."
             logging.error(msg)
             msgs.append(msg)
             epgXmlComponent.failed(msg)
@@ -337,7 +255,7 @@ class YouseeEpgDownloader():
 
 
 def rotateLogs(config):
-    if config.oldLogFiles > 0 and  os.path.exists(config.logFile) and os.path.getsize(config.logFile) > config.logFileMaxSize:
+    if config.oldLogFiles > 0 and os.path.exists(config.logFile) and os.path.getsize(config.logFile) > config.logFileMaxSize:
         def numToFile(i): return "%s.%i" % (config.logFile, i)
 
         a = map(numToFile, range(0, config.oldLogFiles-1))
