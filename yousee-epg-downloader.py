@@ -258,7 +258,10 @@ class YouseeEpgDownloader():
 
 
 def rotateLogs(config):
-    if config.oldLogFiles > 0 and os.path.exists(config.logFile) and os.path.getsize(config.logFile) > config.logFileMaxSize:
+    rotateEnabled = config.logFileMaxSize >= 0 and config.oldLogFiles > 0
+    currentLogFull = os.path.exists(config.logFile) and os.path.getsize(config.logFile) > config.logFileMaxSize
+
+    if rotateEnabled and currentLogFull:
         def numToFile(i): return "%s.%i" % (config.logFile, i)
 
         a = map(numToFile, range(0, config.oldLogFiles-1))
