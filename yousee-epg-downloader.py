@@ -81,7 +81,7 @@ class YouseeEpgDownloader():
         return m.hexdigest()
 
 
-    def getLatestEpgFilePath(self):
+    def getNewestEpgFilePath(self):
         """Get the newest EPG file stored in the data directory."""
 
         # get the files and dirs in self.config.dataDir
@@ -107,32 +107,32 @@ class YouseeEpgDownloader():
         return None
 
 
-    def getLatestMd5Sum(self):
-        """Calculate the md5sum for the latest EPG file."""
-        latestEpg = self.getLatestEpgFilePath()
-        if latestEpg is None:
+    def getNewestMd5Sum(self):
+        """Calculate the md5sum for the newest EPG file."""
+        newestEpg = self.getNewestEpgFilePath()
+        if newestEpg is None:
             return None
         else:
-            f = open(latestEpg)
+            f = open(newestEpg)
             return self.getMd5sum(f.read())
 
 
-    def getAgeOfLatestEpgFile(self):
-        """Calculate the age of the latest EPG file."""
-        latestEpg = self.getLatestEpgFilePath()
-        if latestEpg is None:
+    def getAgeOfNewestEpgFile(self):
+        """Calculate the age of the newest EPG file."""
+        newestEpg = self.getNewestEpgFilePath()
+        if newestEpg is None:
             return None
         else:
-            return datetime.datetime.today() - self.timeOfLastModification(latestEpg)
+            return datetime.datetime.today() - self.timeOfLastModification(newestEpg)
 
 
-    def getMTimeOfLatestEpgFile(self):
-        """Calculate the age of the latest EPG file."""
-        latestEpg = self.getLatestEpgFilePath()
-        if latestEpg is None:
+    def getMTimeOfNewestEpgFile(self):
+        """Calculate the age of the newest EPG file."""
+        newestEpg = self.getNewestEpgFilePath()
+        if newestEpg is None:
             return None
         else:
-            return self.timeOfLastModification(latestEpg)
+            return self.timeOfLastModification(newestEpg)
 
 
     def saveNewEpgData(self, data, filename):
@@ -148,7 +148,7 @@ class YouseeEpgDownloader():
             os.mkdir(targetDir)
 
         filepath = os.path.join(targetDir, filename)
-        old_md5sum = self.getLatestMd5Sum()
+        old_md5sum = self.getNewestMd5Sum()
         new_md5sum = self.getMd5sum(data)
 
         if old_md5sum is None and new_md5sum is None:
@@ -195,17 +195,17 @@ class YouseeEpgDownloader():
         # age related checks
         epgAgeCheckComponent = informer.get(epgAgeCheck)
         epgAgeCheckComponent.started()
-        lastEpgModification = self.getMTimeOfLatestEpgFile()
+        lastEpgModification = self.getMTimeOfNewestEpgFile()
 
         if lastEpgModification is not None:
-            ageOfLatestEpgFile = (datetime.datetime.today() - lastEpgModification)
-            epgTooOld = ageOfLatestEpgFile > (self.config.epgAgeLimit + self.config.epgAgeLimitWiggleRoom)
+            ageOfNewestEpgFile = (datetime.datetime.today() - lastEpgModification)
+            epgTooOld = ageOfNewestEpgFile > (self.config.epgAgeLimit + self.config.epgAgeLimitWiggleRoom)
         else:
-            ageOfLatestEpgFile = None
+            ageOfNewestEpgFile = None
             epgTooOld = False
 
         if epgTooOld:
-            msg = "Last EPG is too old. Age: %s" % str(ageOfLatestEpgFile)
+            msg = "Last EPG is too old. Age: %s" % str(ageOfNewestEpgFile)
             logging.error(msg)
             msgs.append(msg)
 
@@ -297,7 +297,7 @@ class YouseeEpgDownloader():
             return msgs, errors
         elif path is False:
             if epgTooOld:
-                msg = "EPG haven't been updated in " + str(ageOfLatestEpgFile)
+                msg = "EPG haven't been updated in " + str(ageOfNewestEpgFile)
                 logging.error(msg)
                 msgs.append(msg)
                 errors += 1
