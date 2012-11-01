@@ -9,9 +9,6 @@ import logging
 from epgconfig import EpgConfig
 
 import sh
-from sh import date
-from sh import wget
-from sh import xmllint
 
 from stateinformer import StateInformer
 
@@ -28,7 +25,7 @@ epgXml = "yousee-epg-xml-validator"
 
 
 def createFilename(delta=0):
-    timestamp = date("--iso-8601=seconds", date="%s seconds" % delta).stdout.strip()
+    timestamp = sh.date("--iso-8601=seconds", date="%s seconds" % delta).stdout.strip()
     return "yousee-epg_%s.xml" % timestamp
 
 
@@ -46,7 +43,7 @@ class YouseeEpgDownloader():
     def fetchEpg(self):
         """Use wget to fetch EPG data into memory"""
         try:
-            wgetProc = wget(self.config.epgUrl, "-nv", a=self.config.logFile, O="-", user=self.config.username, password=self.config.password)
+            wgetProc = sh.wget(self.config.epgUrl, "-nv", a=self.config.logFile, O="-", user=self.config.username, password=self.config.password)
         except sh.ErrorReturnCode:
             return None
         else:
@@ -61,7 +58,7 @@ class YouseeEpgDownloader():
     def validXmlFile(self, path):
         """Use xmllint to check the file for well-formed ness."""
         try:
-            xmllint("--noout", path)
+            sh.xmllint("--noout", path)
         except sh.ErrorReturnCode_1:
             return False
         else:
@@ -93,7 +90,7 @@ class YouseeEpgDownloader():
         # directories are supposed to be named like "2012", "2013", ..;
         # - remove elements where the filename has a length different from 4,
         # - and isn't a number.
-        dirs = filter(lambda dir: len(dir) is 4 and dir.isdigit(), dirs)
+        dirs = filter(lambda thisDir: len(thisDir) == 4 and thisDir.isdigit(), dirs)
 
         # turn the dirnames into paths relative to self.config.dataDir
         dirs = map(lambda dir: os.path.join(self.config.dataDir, dir), dirs)
@@ -102,10 +99,10 @@ class YouseeEpgDownloader():
         dirs = filter(os.path.isdir, dirs)
         dirs.reverse()
 
-        for dir in dirs:
-            files = sorted(os.listdir(dir))
-            if len(files) is not 0:
-                return os.path.join(dir, files[-1])
+        for thisDir in dirs:
+            files = sorted(os.listdir(thisDir))
+            if len(files) != 0:
+                return os.path.join(thisDir, files[-1])
 
         return None
 
@@ -145,12 +142,12 @@ class YouseeEpgDownloader():
          """
 
         year = str(datetime.datetime.today().year)
-        dir = os.path.join(config.dataDir, year)
+        targetDir = os.path.join(config.dataDir, year)
 
-        if not os.path.exists(dir):
-            os.mkdir(dir)
+        if not os.path.exists(targetDir):
+            os.mkdir(targetDir)
 
-        filepath = os.path.join(dir, filename)
+        filepath = os.path.join(targetDir, filename)
         old_md5sum = self.getLatestMd5Sum()
         new_md5sum = self.getMd5sum(data)
 

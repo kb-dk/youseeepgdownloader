@@ -15,6 +15,7 @@ class StateInformerComponent():
         self.stateMonitorAddress = stateMonitorAddress
         self.component = component
         self.entity = entity
+        self.response = None
 
 
     def getAddress(self):
@@ -29,7 +30,7 @@ class StateInformerComponent():
         component = "<component>%s</component>" % self.component
         state = "<stateName>%s</stateName>" % state
 
-        if message is not "":
+        if message != "":
             message = "<message><![CDATA[%s]]></message>" % message
 
         return "<state>%s%s%s</state>" % (component, state, message)
@@ -53,7 +54,7 @@ class StateInformerComponent():
             return False
         else:
             if response.status != 200:
-                logging.error("%s: %s %s%s" % (errorMsg, response.status, response.reason))
+                logging.error("%s: %s %s" % (errorMsg, response.status, response.reason))
 
             return response.status == 200
 
@@ -76,7 +77,6 @@ class StateInformerComponent():
 
 class StateInformer():
     def __init__(self, entity, stateMonitorAddress):
-        self.response = None
         self.entity = entity
         self.stateMonitorAddress = stateMonitorAddress
 
