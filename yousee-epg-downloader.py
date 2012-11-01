@@ -1,22 +1,13 @@
 #!/usr/bin/env python
 
-import os
-import sys
-import shutil
-import datetime
-import hashlib
-import logging
+import os, sys, datetime, logging
+import sh
 from epgconfig import EpgConfig
 from epgfile import EpgFile
-
-import sh
-
 from misc import rotateLogs, createFilename
 from stateinformer import StateInformer
 
-
 # defines
-
 epgComponent = "yousee-epg-fetcher"
 epgAgeCheck = "yousee-epg-age-check"
 epgDownload = "yousee-epg-downloader"

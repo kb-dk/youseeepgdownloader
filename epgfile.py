@@ -46,7 +46,7 @@ class EpgFile():
 
 
     def getAge(self):
-        """Calculate the age of the newest EPG file."""
+        """Calculate the age of this EPG file."""
         return datetime.datetime.today() - self.getTimeOfLastModification()
 
 
