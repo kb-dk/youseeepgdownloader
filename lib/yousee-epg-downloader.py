@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+from __future__ import division
+
 import os, sys, datetime, logging
 import sh
 from epgconfig import EpgConfig
@@ -99,7 +101,7 @@ class YouseeEpgDownloader():
             t = self.config.epgAgeLimit
 
             while now - t > newestEpg.getTimeOfLastModification():
-                yield t.total_seconds()
+                yield (t.microseconds + (t.seconds + t.days * 24 * 3600) * 10**6) / 10**6
                 t += self.config.epgAgeLimit
 
         for epg in missingEpgs():
@@ -254,8 +256,7 @@ if __name__ == "__main__":
         config = EpgConfig(configFile)
     except Exception as e:
         print "Error loading the config file: " + configFile
-        print e.message
-        sys.exit(2)
+        raise
     else:
         rotateLogs(config)
         logging.basicConfig(filename=config.logFile,level=logging.INFO, format='%(asctime)s: %(message)s')
@@ -270,8 +271,7 @@ if __name__ == "__main__":
         except Exception as e:
             epgComponent_.failed(e.message)
             logging.error("Failed: %s" % filename)
-            print e.message
-            sys.exit(3)
+            raise
         else:
             if errors > 0:
                 epgComponent_.failed("\n".join(messages))
