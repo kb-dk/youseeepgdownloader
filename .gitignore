@@ -2,3 +2,5 @@
 *.iml
 .idea/*
 *.json
+.project
+.pydevproject
