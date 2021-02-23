@@ -1,3 +1,8 @@
+This repository have been archived and exists for historical purposes. 
+No updates or futher development will go into this repository. The content can be used as is but no support will be given. 
+
+---
+
 # yousee-epg-downloader
 
 This program will download a file everytime it is run, and only store it if it differs from the last
